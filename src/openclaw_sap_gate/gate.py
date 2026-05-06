@@ -168,7 +168,8 @@ def get_manifest(app_id: str) -> Optional[dict]:
     manifest_path = (_resolve_app_path(SAFE_ROOT, app_id) or Path()) / "safe-app-manifest.json"
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.warning("get_manifest(%s): failed to read/parse manifest: %s", app_id, exc)
         return None
 
 
