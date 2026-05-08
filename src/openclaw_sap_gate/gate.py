@@ -21,7 +21,11 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 
-SAFE_ROOT = Path(os.environ.get("SAP_SAFE_ROOT", Path.home() / ".sap" / "Applications"))
+SAFE_ROOT = Path(
+    os.environ.get("WILLOW_SAFE_ROOT")        # primary: set by willow.sh
+    or os.environ.get("SAP_SAFE_ROOT")        # backwards-compat alias
+    or Path.home() / ".sap" / "Applications"  # legacy fallback
+)
 LOG_DIR = Path(os.environ.get("SAP_LOG_DIR", Path.home() / ".sap" / "log"))
 
 _EXPECTED_FP = os.environ.get("SAP_PGP_FINGERPRINT", "").upper().replace(" ", "")
