@@ -21,7 +21,11 @@ from pathlib import Path
 from datetime import datetime, timezone
 from typing import Optional
 
-SAFE_ROOT = Path(os.environ.get("SAP_SAFE_ROOT", Path.home() / ".sap" / "Applications"))
+SAFE_ROOT = Path(
+    os.environ.get("WILLOW_SAFE_ROOT")        # primary: set by willow.sh
+    or os.environ.get("SAP_SAFE_ROOT")        # backwards-compat alias
+    or Path.home() / ".sap" / "Applications"  # legacy fallback
+)
 LOG_DIR = Path(os.environ.get("SAP_LOG_DIR", Path.home() / ".sap" / "log"))
 
 _EXPECTED_FP = os.environ.get("SAP_PGP_FINGERPRINT", "").upper().replace(" ", "")
@@ -96,7 +100,9 @@ def _verify_pgp(manifest_path: Path) -> tuple[bool, str]:
         if signer_fp is None:
             return False, f"No VALIDSIG in gpg output: {stdout[:200].replace(chr(10), ' ')}"
 
-        if _EXPECTED_FP and signer_fp != _EXPECTED_FP:
+        if not _EXPECTED_FP:
+            return False, "SAP_PGP_FINGERPRINT not configured — gate cannot verify signer identity"
+        if signer_fp != _EXPECTED_FP:
             return False, f"signature by unexpected key: {signer_fp[:16]}... (expected: {_EXPECTED_FP[:16]}...)"
 
         return True, "signature verified"
@@ -166,7 +172,8 @@ def get_manifest(app_id: str) -> Optional[dict]:
     manifest_path = (_resolve_app_path(SAFE_ROOT, app_id) or Path()) / "safe-app-manifest.json"
     try:
         return json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception:
+    except Exception as exc:
+        logger.warning("get_manifest(%s): failed to read/parse manifest: %s", app_id, exc)
         return None
 
 
