@@ -28,7 +28,15 @@ SAFE_ROOT = Path(
 )
 LOG_DIR = Path(os.environ.get("SAP_LOG_DIR", Path.home() / ".sap" / "log"))
 
-_EXPECTED_FP = os.environ.get("SAP_PGP_FINGERPRINT", "").upper().replace(" ", "")
+# Trust anchor: prefer the SAP-standard env name, fall back to the willow-fleet
+# name so a gate sharing an environment with willow-2.0 resolves the same key.
+# Fail-closed preserved: if NEITHER is set, _EXPECTED_FP is "" and _verify_pgp
+# denies ("SAP_PGP_FINGERPRINT not configured").
+_EXPECTED_FP = (
+    os.environ.get("SAP_PGP_FINGERPRINT")
+    or os.environ.get("WILLOW_PGP_FINGERPRINT")
+    or ""
+).upper().replace(" ", "")
 
 _APP_ID_RE = _re.compile(r'^[a-zA-Z0-9][a-zA-Z0-9_\-]*$')
 
