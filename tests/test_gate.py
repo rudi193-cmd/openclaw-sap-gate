@@ -89,7 +89,9 @@ class TestAuthorized:
         with patch("subprocess.run", return_value=mock_result):
             assert authorized("my-app") is False
 
-    def test_gpg_success_no_fingerprint_pinned(self, safe_root, monkeypatch):
+    def test_no_fingerprint_pinned_fails_closed(self, safe_root, monkeypatch, tmp_path):
+        """A valid signature with NO pinned fingerprint must DENY (fail-closed):
+        without a trust anchor the gate cannot verify signer identity."""
         _make_app(safe_root, "my-app")
         monkeypatch.setattr("openclaw_sap_gate.gate._EXPECTED_FP", "")
         mock_result = MagicMock()
@@ -97,7 +99,9 @@ class TestAuthorized:
         mock_result.stdout = b"[GNUPG:] VALIDSIG abc 2026 123 0 0 0 17 8 00 AAAA\n"
         mock_result.stderr = b""
         with patch("subprocess.run", return_value=mock_result):
-            assert authorized("my-app") is True
+            assert authorized("my-app") is False
+        gaps = (tmp_path / "log" / "gaps.jsonl").read_text()
+        assert "not configured" in gaps
 
     def test_case_insensitive_folder(self, safe_root):
         _make_app(safe_root, "MyApp")
@@ -122,3 +126,26 @@ class TestRequireAuthorized:
         _make_app(safe_root, "my-app")
         with patch("openclaw_sap_gate.gate._verify_pgp", return_value=(True, "ok")):
             require_authorized("my-app")  # should not raise
+
+
+class TestGetManifest:
+    def test_returns_parsed_manifest(self, safe_root):
+        _make_app(safe_root, "my-app")
+        with patch("openclaw_sap_gate.gate._verify_pgp", return_value=(True, "ok")):
+            manifest = get_manifest("my-app")
+        assert manifest is not None
+        assert manifest["app_id"] == "my-app"
+
+    def test_no_cwd_fallback_when_app_path_unresolvable(self, safe_root, tmp_path, monkeypatch):
+        """If the app dir can't be resolved after authorized(), get_manifest must
+        return None — never read safe-app-manifest.json from the current directory."""
+        cwd = tmp_path / "attacker-cwd"
+        cwd.mkdir()
+        (cwd / "safe-app-manifest.json").write_text(
+            json.dumps({"app_id": "planted", "name": "planted"})
+        )
+        monkeypatch.chdir(cwd)
+        # authorized() passes but path resolution then fails (e.g. dir removed race)
+        with patch("openclaw_sap_gate.gate.authorized", return_value=True), \
+             patch("openclaw_sap_gate.gate._resolve_app_path", return_value=None):
+            assert get_manifest("my-app") is None
